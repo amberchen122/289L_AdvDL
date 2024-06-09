@@ -45,9 +45,7 @@ def train_one_epoch(model, criterion,
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
-def train_one_epoch_distillation(teacher, student, criterion,
-                    data_loader, optimizer,
-                    device: torch.device, epoch, alpha=1.0, temp=1.0):
+def train_one_epoch_distillation(teacher, student, criterion, data_loader, optimizer, device: torch.device, epoch, alpha=1.0, temp=1.0):
     teacher.eval()
     student.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -59,15 +57,18 @@ def train_one_epoch_distillation(teacher, student, criterion,
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
-           
         with torch.cuda.amp.autocast():
             outputs = student(samples)
             outputs_teacher = teacher(samples)
             
-            # Imeplemet knowledge distillation loss here
-            
-            
-            # *****************************************
+            # Knowledge distillation loss
+            loss_ce = criterion(outputs, targets)
+            loss_kl = kl_loss(
+                torch.nn.functional.log_softmax(outputs / temp, dim=1),
+                torch.nn.functional.softmax(outputs_teacher / temp, dim=1)
+            )
+            loss = loss_ce + alpha * loss_kl * (temp ** 2)
+        
         loss_value = loss.item()
 
         if not math.isfinite(loss_value):
@@ -83,6 +84,7 @@ def train_one_epoch_distillation(teacher, student, criterion,
 
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+
 
 
 @torch.no_grad()
